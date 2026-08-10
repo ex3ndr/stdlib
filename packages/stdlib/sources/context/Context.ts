@@ -1,4 +1,5 @@
 import type { Log } from "../log/Log.js";
+import type { ContextSpan } from "../telemetry/span.js";
 
 declare global {
     namespace stdlib {
@@ -15,6 +16,7 @@ export interface Context extends stdlib.ContextExtensions {
     readonly lifetime: AbortSignal | undefined;
     readonly log: Log;
     readonly name: string;
+    readonly span: ContextSpan;
 }
 
 export function isContext(source: unknown): source is Context {

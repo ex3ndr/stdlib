@@ -50,12 +50,14 @@ describe("telemetry", () => {
 
         assert.equal(ContextTracer.get(ctx), tracer);
         assert.equal(rootSpan, tracer.spans[0]);
+        assert.equal(traceSpan.get(ctx), rootSpan);
         assert.equal(tracer.spans[0]?.name, "worker");
         assert.equal(tracer.spans[0]?.parent, undefined);
 
-        const result = await span(ctx, "job:run", async (ctx) => {
+        const result = await ctx.span("job:run", async (ctx) => {
             const childSpan = traceSpan.get(ctx);
             assert.equal(childSpan, tracer.spans[1]);
+            assert.equal(traceSpan.get(ctx), childSpan);
             assert.equal(tracer.spans[1]?.parent, rootSpan);
             assert.equal(tracer.spans[1]?.ended, false);
             return "done";
@@ -91,5 +93,9 @@ describe("telemetry", () => {
         assert.equal(result, 42);
         assert.equal(ContextTracer.get(ctx), undefined);
         assert.equal(traceSpan.get(ctx), undefined);
+        assert.equal(
+            ctx.span("job:bound", (childCtx) => childCtx),
+            ctx,
+        );
     });
 });

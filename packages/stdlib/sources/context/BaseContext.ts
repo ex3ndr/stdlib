@@ -1,4 +1,5 @@
 import type { Log } from "../log/Log.js";
+import type { ContextSpan } from "../telemetry/span.js";
 import type { Context } from "./Context.js";
 import { ContextDeriveSymbol, ContextSymbol } from "./Context.js";
 
@@ -14,4 +15,5 @@ export interface BaseContext extends stdlib.ContextExtensions {
     readonly lifetime: AbortSignal | undefined;
     readonly log: Log;
     readonly name: string;
+    readonly span: ContextSpan;
 }

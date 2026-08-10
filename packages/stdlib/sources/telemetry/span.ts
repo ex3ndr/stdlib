@@ -1,6 +1,15 @@
+import { BaseContext } from "../context/BaseContext.js";
 import type { Context } from "../context/Context.js";
 import type { TraceSpan } from "./Tracer.js";
 import { ContextTrace } from "./impl/ContextTrace.js";
+
+export type ContextSpan = <Result>(name: string, work: (ctx: Context) => Result) => Result;
+
+Object.defineProperty(BaseContext.prototype, "span", {
+    value<Result>(this: Context, name: string, work: (ctx: Context) => Result): Result {
+        return span(this, name, work);
+    },
+});
 
 export function span<Result>(ctx: Context, name: string, work: (ctx: Context) => Result): Result {
     const current = ContextTrace.get(ctx);
