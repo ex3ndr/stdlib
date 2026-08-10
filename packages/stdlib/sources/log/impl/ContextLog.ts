@@ -37,7 +37,7 @@ function createLog(ctx: Context): Log {
 function write(ctx: Context, level: keyof Logger, args: unknown[]): void {
     const value = ContextLog.get(ctx);
     if (value.logger === undefined) {
-        throw new Error("Context has no logger");
+        return;
     }
     value.logger[level].call(value.logger, value.context, ...args);
 }

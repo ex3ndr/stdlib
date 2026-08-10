@@ -1,15 +1,23 @@
 import type { Context } from "../Context.js";
 import { ContextDeriveSymbol } from "../Context.js";
-import type { ContextNamespace, DerivedContext } from "../ContextNamespace.js";
+import type {
+    ContextNamespace,
+    ContextNamespaceOptions,
+    DerivedContext,
+} from "../ContextNamespace.js";
 import { getContextValues } from "./getContextValues.js";
+import { registerNamedContextFactory } from "./NamedContextFactories.js";
 
 export class ContextNamespaceImpl<Value> implements ContextNamespace<Value> {
     readonly name: string;
     readonly defaultValue: Value;
 
-    constructor(name: string, defaultValue: Value) {
+    constructor(name: string, defaultValue: Value, options: ContextNamespaceOptions<Value>) {
         this.name = name;
         this.defaultValue = defaultValue;
+        if (options.onNamedContextCreated !== undefined) {
+            registerNamedContextFactory(name, defaultValue, options.onNamedContextCreated);
+        }
         Object.freeze(this);
     }
 

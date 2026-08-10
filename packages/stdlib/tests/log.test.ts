@@ -67,10 +67,10 @@ describe("log", () => {
         });
     });
 
-    it("fails clearly when no logger has been installed", () => {
+    it("does nothing when no logger has been installed", () => {
         const ctx = createRootContext().named("unconfigured");
 
         assert.equal(ContextLogger.get(ctx), undefined);
-        assert.throws(() => ctx.log.info("test:write"), /Context has no logger/);
+        assert.doesNotThrow(() => ctx.log.info("test:write"));
     });
 });

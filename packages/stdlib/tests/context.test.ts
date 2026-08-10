@@ -82,6 +82,30 @@ describe("context", () => {
         assert.equal(ctx.name, "worker");
     });
 
+    it("derives namespace values when a named context is created", () => {
+        const calls: Array<{ ctx: Context; name: string; value: number }> = [];
+        const sequence = createContextNamespace("context-test-sequence", 0, {
+            onNamedContextCreated(ctx, name, value) {
+                calls.push({ ctx, name, value });
+                return value + 1;
+            },
+        });
+        const root = sequence.set(createRootContext(), 41);
+        const first = root.named("worker");
+        const second = root.named("worker");
+
+        assert.equal(sequence.get(root), 41);
+        assert.equal(sequence.get(first), 42);
+        assert.equal(sequence.get(second), 42);
+        assert.deepEqual(
+            calls.map(({ ctx, name, value }) => ({ sameRoot: ctx === root, name, value })),
+            [
+                { sameRoot: true, name: "worker", value: 41 },
+                { sameRoot: true, name: "worker", value: 41 },
+            ],
+        );
+    });
+
     it("runs globally registered typed setters", () => {
         const ctx = testCtx;
 

@@ -117,6 +117,38 @@ shallow-merges its fields with existing log context. Each
 `ctx.log.<level>(...)` call passes those fields as the first argument to the
 original logger method, followed by the provided arguments. The exported levels
 are `trace`, `debug`, `info`, `warn`, `error`, and `fatal`.
+Without an installed logger, every `ctx.log` method is a no-op.
+
+## Telemetry
+
+Install an OpenTelemetry-style tracer adapter on the root before creating named
+contexts. Naming a root-derived context starts its root span automatically:
+
+```typescript
+import { createRootContext, span, traceSpan, withTracer, type Tracer } from "@steve.kite/stdlib";
+
+declare const tracer: Tracer;
+
+let root = createRootContext();
+root = withTracer(root, tracer);
+
+const ctx = root.named("worker"); // Starts the "worker" root span.
+traceSpan.get(ctx); // The root span.
+
+await span(ctx, "job:run", async (ctx) => {
+    traceSpan.get(ctx); // The child "job:run" span.
+    // Perform traced work with ctx.
+});
+```
+
+`span(ctx, name, work)` records thrown or rejected failures, ends its child span
+when the work settles, and returns the work's result. Without an installed
+tracer it calls `work(ctx)` directly and performs no tracing. `tracer.get(ctx)`
+returns the installed tracer and `traceSpan.get(ctx)` returns the current span.
+
+The tracer adapter creates spans with
+`startSpan(name, parentSpan)`; spans provide `end()` and may provide
+`recordException(error)`.
 
 ## Concurrency
 

@@ -4,6 +4,7 @@ import { ContextDeriveSymbol, ContextSymbol, ContextValuesSymbol } from "../Cont
 import type { RootContext } from "../RootContext.js";
 import { ContextImpl } from "./ContextImpl.js";
 import { ContextName } from "./ContextName.js";
+import { applyNamedContextFactories } from "./NamedContextFactories.js";
 import { getContextValues } from "./getContextValues.js";
 
 export class RootContextImpl extends BaseContext implements RootContext {
@@ -22,6 +23,7 @@ export class RootContextImpl extends BaseContext implements RootContext {
     }
 
     named(name: string): Context {
-        return new ContextImpl(getContextValues(ContextName.set(this, name)));
+        const values = getContextValues(ContextName.set(this, name));
+        return new ContextImpl(applyNamedContextFactories(this, values, name));
     }
 }
