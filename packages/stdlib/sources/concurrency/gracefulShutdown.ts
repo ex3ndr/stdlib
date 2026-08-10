@@ -1,14 +1,7 @@
 import type { Context } from "../context/Context.js";
-import { ContextShutdown } from "./impl/ContextShutdown.js";
+import type { DerivedContext } from "../context/ContextNamespace.js";
+import { shutdown as ShutdownContext } from "./impl/ContextShutdown.js";
 import { withLifetime } from "./withLifetime.js";
-
-export interface GracefulShutdown {
-    readonly ctx: Context;
-    readonly shuttingDown: boolean;
-    register(name: string, handler: (ctx: Context) => Promise<void>): () => void;
-    pending(): readonly string[];
-    shutdown(options?: { timeout?: number }): Promise<GracefulShutdownReport>;
-}
 
 export interface GracefulShutdownReport {
     timedOut: readonly string[];
@@ -17,45 +10,87 @@ export interface GracefulShutdownReport {
 
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10_000;
 
-export function gracefulShutdown(ctx: Context): GracefulShutdown {
-    const handlers = new Map<string, (ctx: Context) => Promise<void>>();
-    const running = new Set<string>();
-    const controller = new AbortController();
-    let shutdownCtx: Context;
-    let started: Promise<GracefulShutdownReport> | undefined;
+interface GracefulShutdownState {
+    readonly handlers: Map<string, (ctx: Context) => Promise<void>>;
+    readonly running: Set<string>;
+    readonly controller: AbortController;
+    ctx: Context | undefined;
+    started: Promise<GracefulShutdownReport> | undefined;
+}
 
-    const shutdown: GracefulShutdown = {
-        get ctx() {
-            return shutdownCtx;
-        },
-        get shuttingDown() {
-            return shutdownCtx.lifetime?.aborted === true;
-        },
-        register(name, handler) {
-            handlers.set(name, handler);
-            return () => {
-                if (handlers.get(name) === handler) {
-                    handlers.delete(name);
-                }
-            };
-        },
-        pending() {
-            return [...running];
-        },
-        shutdown(options = {}) {
-            started ??= runShutdown(
-                shutdownCtx,
-                handlers,
-                running,
-                controller,
-                options.timeout ?? DEFAULT_SHUTDOWN_TIMEOUT_MS,
-            );
-            return started;
-        },
-    };
+const states = new WeakMap<GracefulShutdown, GracefulShutdownState>();
 
-    shutdownCtx = ContextShutdown.set(withLifetime(ctx, controller.signal), shutdown);
-    return shutdown;
+export class GracefulShutdown {
+    constructor() {
+        states.set(this, {
+            handlers: new Map(),
+            running: new Set(),
+            controller: new AbortController(),
+            ctx: undefined,
+            started: undefined,
+        });
+    }
+
+    get ctx(): Context {
+        return getState(this).ctx ?? missingContext();
+    }
+
+    get shuttingDown(): boolean {
+        return getState(this).controller.signal.aborted;
+    }
+
+    register(name: string, handler: (ctx: Context) => Promise<void>): () => void {
+        const { handlers } = getState(this);
+        handlers.set(name, handler);
+        return () => {
+            if (handlers.get(name) === handler) {
+                handlers.delete(name);
+            }
+        };
+    }
+
+    pending(): readonly string[] {
+        return [...getState(this).running];
+    }
+
+    shutdown(options: { timeout?: number } = {}): Promise<GracefulShutdownReport> {
+        const state = getState(this);
+        const ctx = state.ctx ?? missingContext();
+        state.started ??= runShutdown(
+            ctx,
+            state.handlers,
+            state.running,
+            state.controller,
+            options.timeout ?? DEFAULT_SHUTDOWN_TIMEOUT_MS,
+        );
+        return state.started;
+    }
+}
+
+export function withShutdown<Source extends Context>(
+    ctx: Source,
+    value: GracefulShutdown,
+): DerivedContext<Source> {
+    const state = getState(value);
+    if (state.ctx !== undefined) {
+        throw new Error("GracefulShutdown is already attached to a context");
+    }
+
+    const shutdownCtx = ShutdownContext.set(withLifetime(ctx, state.controller.signal), value);
+    state.ctx = shutdownCtx;
+    return shutdownCtx as unknown as DerivedContext<Source>;
+}
+
+function getState(value: GracefulShutdown): GracefulShutdownState {
+    const state = states.get(value);
+    if (state === undefined) {
+        throw new TypeError("Invalid GracefulShutdown object");
+    }
+    return state;
+}
+
+function missingContext(): never {
+    throw new Error("GracefulShutdown is not attached to a context");
 }
 
 async function runShutdown(

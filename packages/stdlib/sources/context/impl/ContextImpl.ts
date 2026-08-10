@@ -1,6 +1,6 @@
 import { BaseContext } from "../BaseContext.js";
 import type { Context } from "../Context.js";
-import { ContextSymbol, ContextValuesSymbol } from "../Context.js";
+import { ContextDeriveSymbol, ContextSymbol, ContextValuesSymbol } from "../Context.js";
 
 export class ContextImpl extends BaseContext {
     readonly [ContextSymbol]: Context;
@@ -11,5 +11,9 @@ export class ContextImpl extends BaseContext {
         this[ContextValuesSymbol] = values;
         this[ContextSymbol] = this;
         Object.freeze(this);
+    }
+
+    [ContextDeriveSymbol](values: Record<string, unknown>): Context {
+        return new ContextImpl(values);
     }
 }

@@ -3,16 +3,21 @@ import { describe, it } from "node:test";
 
 import {
     AbortedError,
-    EmptyContext,
+    GracefulShutdown,
     asyncLock,
     asyncQueue,
     backoff,
+    createRootContext,
     delay,
     forever,
-    gracefulShutdown,
     retry,
+    shutdown as ShutdownContext,
     withLifetime,
+    withShutdown,
 } from "../sources/index.js";
+
+const testRoot = createRootContext();
+const testCtx = testRoot.named("concurrency-tests");
 
 describe("asyncLock", () => {
     it("runs work in arrival order without overlapping", async () => {
@@ -20,8 +25,8 @@ describe("asyncLock", () => {
         const events: string[] = [];
 
         const run = (name: string, ms: number) =>
-            lock.runInLock(EmptyContext, async (ctx) => {
-                assert.equal(ctx, EmptyContext);
+            lock.runInLock(testCtx, async (ctx) => {
+                assert.equal(ctx, testCtx);
                 events.push(`${name}:start`);
                 await delay(ctx, ms);
                 events.push(`${name}:end`);
@@ -36,24 +41,24 @@ describe("asyncLock", () => {
         const lock = asyncLock();
 
         await assert.rejects(
-            lock.runInLock(EmptyContext, () => Promise.reject(new Error("boom"))),
+            lock.runInLock(testCtx, () => Promise.reject(new Error("boom"))),
             /boom/,
         );
-        await assert.doesNotReject(lock.runInLock(EmptyContext, () => Promise.resolve("ok")));
-        assert.equal(await asyncQueue().runInLock(EmptyContext, () => Promise.resolve(42)), 42);
+        await assert.doesNotReject(lock.runInLock(testCtx, () => Promise.resolve("ok")));
+        assert.equal(await asyncQueue().runInLock(testCtx, () => Promise.resolve(42)), 42);
     });
 });
 
 describe("delay", () => {
     it("waits without a lifetime", async () => {
         const start = Date.now();
-        await delay(EmptyContext, 15);
+        await delay(testCtx, 15);
         assert.ok(Date.now() - start >= 10);
     });
 
     it("throws AbortedError when the context lifetime ends", async () => {
         const controller = new AbortController();
-        const ctx = withLifetime(EmptyContext, controller.signal);
+        const ctx = withLifetime(testCtx, controller.signal);
         const waiting = delay(ctx, 5_000);
 
         controller.abort();
@@ -67,9 +72,9 @@ describe("backoff and retry", () => {
     it("retries in context until work succeeds", async () => {
         let attempts = 0;
         const value = await backoff(
-            EmptyContext,
+            testCtx,
             (ctx, attempt) => {
-                assert.equal(ctx, EmptyContext);
+                assert.equal(ctx, testCtx);
                 attempts = attempt;
                 if (attempt < 3) {
                     throw new Error("not yet");
@@ -88,7 +93,7 @@ describe("backoff and retry", () => {
         let attempts = 0;
 
         await backoff(
-            EmptyContext,
+            testCtx,
             () => {
                 attempts += 1;
                 if (attempts < 2) {
@@ -99,7 +104,7 @@ describe("backoff and retry", () => {
             {
                 initialDelay: 1,
                 onError: (ctx, error, attempt) => {
-                    assert.equal(ctx, EmptyContext);
+                    assert.equal(ctx, testCtx);
                     reports.push({ attempt, error });
                 },
             },
@@ -111,7 +116,7 @@ describe("backoff and retry", () => {
 
     it("stops when the context is aborted", async () => {
         const controller = new AbortController();
-        const ctx = withLifetime(EmptyContext, controller.signal);
+        const ctx = withLifetime(testCtx, controller.signal);
         let attempts = 0;
 
         const running = backoff(
@@ -131,7 +136,7 @@ describe("backoff and retry", () => {
     it("bounds retry by time and throws the last failure", async () => {
         await assert.rejects(
             retry(
-                EmptyContext,
+                testCtx,
                 () => {
                     throw new Error("always fails");
                 },
@@ -145,7 +150,7 @@ describe("backoff and retry", () => {
 describe("forever", () => {
     it("repeats until the context lifetime ends", async () => {
         const controller = new AbortController();
-        const ctx = withLifetime(EmptyContext, controller.signal);
+        const ctx = withLifetime(testCtx, controller.signal);
         let passes = 0;
 
         await forever(ctx, { name: "counter", delay: 1 }, async (ctx) => {
@@ -160,7 +165,7 @@ describe("forever", () => {
     });
 
     it("does not start when the context is already aborted", async () => {
-        const ctx = withLifetime(EmptyContext, AbortSignal.abort());
+        const ctx = withLifetime(testCtx, AbortSignal.abort());
         let ran = false;
 
         await forever(ctx, { name: "idle", delay: 1 }, async () => {
@@ -173,11 +178,14 @@ describe("forever", () => {
 
 describe("gracefulShutdown", () => {
     it("aborts its derived context and waits for named handlers", async () => {
-        const shutdown = gracefulShutdown(EmptyContext);
+        const shutdown = new GracefulShutdown();
+        const ctx = withShutdown(testCtx, shutdown);
         const finished: string[] = [];
 
-        assert.equal(EmptyContext.shutdown, undefined);
-        assert.equal(shutdown.ctx.shutdown, shutdown);
+        assert.equal("shutdown" in testCtx, false);
+        assert.equal("shutdown" in ctx, false);
+        assert.equal(ShutdownContext.get(testCtx), undefined);
+        assert.equal(ShutdownContext.get(ctx), shutdown);
         shutdown.register("first", async (ctx) => {
             assert.equal(ctx, shutdown.ctx);
             assert.equal(ctx.lifetime?.aborted, true);
@@ -195,13 +203,14 @@ describe("gracefulShutdown", () => {
     });
 
     it("provides the context that unwinds a registered forever loop", async () => {
-        const shutdown = gracefulShutdown(EmptyContext);
+        const shutdown = new GracefulShutdown();
+        const ctx = withShutdown(testCtx, shutdown);
         let passes = 0;
-        const loop = forever(shutdown.ctx, { name: "poller", delay: 1 }, async () => {
+        const loop = forever(ctx, { name: "poller", delay: 1 }, async () => {
             passes += 1;
         });
 
-        await delay(EmptyContext, 10);
+        await delay(testCtx, 10);
         await shutdown.shutdown();
         await loop;
 
@@ -210,7 +219,8 @@ describe("gracefulShutdown", () => {
     });
 
     it("reports timed-out and failed handlers by name", async () => {
-        const shutdown = gracefulShutdown(EmptyContext);
+        const shutdown = new GracefulShutdown();
+        withShutdown(testCtx, shutdown);
         shutdown.register("stuck", () => new Promise<void>(() => {}));
         shutdown.register("bad", () => Promise.reject(new Error("handler failed")));
 
@@ -222,7 +232,8 @@ describe("gracefulShutdown", () => {
     });
 
     it("runs once and supports unregistering handlers", async () => {
-        const shutdown = gracefulShutdown(EmptyContext);
+        const shutdown = new GracefulShutdown();
+        withShutdown(testCtx, shutdown);
         let calls = 0;
         const unregister = shutdown.register("temporary", async () => {
             calls += 1;
@@ -232,5 +243,17 @@ describe("gracefulShutdown", () => {
         await Promise.all([shutdown.shutdown(), shutdown.shutdown()]);
 
         assert.equal(calls, 0);
+    });
+
+    it("can be installed on a root before named contexts are created", () => {
+        const shutdown = new GracefulShutdown();
+        const root = withShutdown(createRootContext(), shutdown);
+        const first = root.named("worker");
+        const second = root.named("worker");
+
+        assert.equal(ShutdownContext.get(root), shutdown);
+        assert.equal(ShutdownContext.get(first), shutdown);
+        assert.equal(ShutdownContext.get(second), shutdown);
+        assert.notEqual(first, second);
     });
 });

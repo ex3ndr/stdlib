@@ -2,6 +2,7 @@ import type { Context } from "../context/Context.js";
 import { isAbortedError } from "./AbortedError.js";
 import { backoff } from "./backoff.js";
 import { delay } from "./delay.js";
+import { shutdown } from "./impl/ContextShutdown.js";
 
 export interface ForeverOptions {
     delay: number;
@@ -16,7 +17,7 @@ export function forever(
     work: (ctx: Context) => Promise<void>,
 ): Promise<void> {
     const loop = runForever(ctx, options, work);
-    const unregister = ctx.shutdown?.register(options.name, (ctx) => {
+    const unregister = shutdown.get(ctx)?.register(options.name, (ctx) => {
         void ctx;
         return loop;
     });

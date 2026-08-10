@@ -3,11 +3,9 @@ import { describe, it } from "node:test";
 
 import {
     ContextLifetime,
-    ContextName,
     ContextWrapper,
-    EmptyContext,
     createContextNamespace,
-    createNamedContext,
+    createRootContext,
     isContext,
     registerContextExtension,
     timeout,
@@ -32,11 +30,15 @@ function assertContextExtensionTypes(ctx: Context): void {
     ctx.contextTestValue = "invalid";
     // @ts-expect-error The registered getter must match the augmented type.
     registerContextExtension("contextTestValue", () => "invalid");
+    // @ts-expect-error Only a root context can create a named context.
+    ctx.named("child");
 }
 void assertContextExtensionTypes;
 
 const labelNamespace = createContextNamespace("context-test-label", "default");
 const valueWrites: Array<{ ctx: Context; value: number }> = [];
+const testRoot = createRootContext();
+const testCtx = testRoot.named("context-tests");
 
 registerContextExtension("contextTestLabel", (ctx) => labelNamespace.get(ctx));
 registerContextExtension("contextTestValue", {
@@ -48,27 +50,40 @@ registerContextExtension("contextTestValue", {
 
 describe("context", () => {
     it("creates immutable contexts and updates namespace values", () => {
-        const ctx = labelNamespace.set(EmptyContext, "request");
+        const ctx = labelNamespace.set(testCtx, "request");
 
-        assert.equal(labelNamespace.get(EmptyContext), "default");
+        assert.equal(labelNamespace.get(testCtx), "default");
         assert.equal(labelNamespace.get(ctx), "request");
         assert.equal(ctx.contextTestLabel, "request");
         assert.equal(isContext(ctx), true);
         assert.equal(isContext({}), false);
     });
 
-    it("creates named contexts", () => {
-        const ctx = createNamedContext("worker");
+    it("creates named contexts only from a root", () => {
+        const root = createRootContext();
 
-        assert.equal(EmptyContext.name, "<noname>");
+        assert.equal(root.name, "<root>");
+        const ctx = root.named("worker");
+        const anotherCtx = root.named("worker");
         assert.equal(ctx.name, "worker");
-        assert.equal(ContextName.get(ctx), "worker");
+        assert.equal(anotherCtx.name, "worker");
+        assert.notEqual(anotherCtx, ctx);
         assert.equal(ctx.contextTestLabel, "default");
         assert.equal(isContext(ctx), true);
+        assert.equal("named" in ctx, false);
+    });
+
+    it("preserves root contexts when namespaces derive values", () => {
+        const root = labelNamespace.set(createRootContext(), "root-value");
+        const ctx = root.named("worker");
+
+        assert.equal(root.name, "<root>");
+        assert.equal(labelNamespace.get(ctx), "root-value");
+        assert.equal(ctx.name, "worker");
     });
 
     it("runs globally registered typed setters", () => {
-        const ctx = EmptyContext;
+        const ctx = testCtx;
 
         ctx.contextTestValue = 42;
 
@@ -80,7 +95,7 @@ describe("context", () => {
     it("resolves extensions through context wrappers", () => {
         class WrappedContext extends ContextWrapper {}
 
-        const wrapped: Context = new WrappedContext(labelNamespace.set(EmptyContext, "wrapped"));
+        const wrapped: Context = new WrappedContext(labelNamespace.set(testCtx, "wrapped"));
 
         assert.equal(wrapped.contextTestLabel, "wrapped");
     });
@@ -88,12 +103,12 @@ describe("context", () => {
     it("derives contexts with optional lifetimes", () => {
         const parentController = new AbortController();
         const childController = new AbortController();
-        const parent = withLifetime(EmptyContext, parentController.signal);
+        const parent = withLifetime(testCtx, parentController.signal);
         const child = withLifetime(parent, childController.signal);
         const namespacedChild = labelNamespace.set(child, "child");
 
-        assert.equal(EmptyContext.lifetime, undefined);
-        assert.equal(ContextLifetime.get(EmptyContext), undefined);
+        assert.equal(testCtx.lifetime, undefined);
+        assert.equal(ContextLifetime.get(testCtx), undefined);
         assert.equal(parent.lifetime, parentController.signal);
         assert.equal(ContextLifetime.get(parent), parentController.signal);
         assert.equal(child.lifetime?.aborted, false);
@@ -110,7 +125,7 @@ describe("context", () => {
         let callbackLifetime: AbortSignal | undefined;
 
         await assert.rejects(
-            timeout(EmptyContext, { ms: 0 }, async (ctx) => {
+            timeout(testCtx, { ms: 0 }, async (ctx) => {
                 callbackLifetime = ctx.lifetime;
                 await new Promise<never>((_, reject) => {
                     ctx.lifetime?.addEventListener("abort", () => reject(ctx.lifetime?.reason), {
@@ -126,7 +141,7 @@ describe("context", () => {
     it("ends a timeout context when its callback settles", async () => {
         let callbackLifetime: AbortSignal | undefined;
 
-        const result = await timeout(EmptyContext, { ms: 60_000 }, (ctx) => {
+        const result = await timeout(testCtx, { ms: 60_000 }, (ctx) => {
             callbackLifetime = ctx.lifetime;
             return "done";
         });

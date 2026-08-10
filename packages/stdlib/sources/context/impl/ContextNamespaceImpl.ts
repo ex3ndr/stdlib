@@ -1,6 +1,6 @@
 import type { Context } from "../Context.js";
-import type { ContextNamespace } from "../ContextNamespace.js";
-import { ContextImpl } from "./ContextImpl.js";
+import { ContextDeriveSymbol } from "../Context.js";
+import type { ContextNamespace, DerivedContext } from "../ContextNamespace.js";
 import { getContextValues } from "./getContextValues.js";
 
 export class ContextNamespaceImpl<Value> implements ContextNamespace<Value> {
@@ -22,9 +22,9 @@ export class ContextNamespaceImpl<Value> implements ContextNamespace<Value> {
         return this.defaultValue;
     }
 
-    set(ctx: Context, value: Value): Context {
+    set<Source extends Context>(ctx: Source, value: Value): DerivedContext<Source> {
         const values = { ...getContextValues(ctx) };
         values[this.name] = value;
-        return new ContextImpl(values);
+        return ctx[ContextDeriveSymbol](values) as DerivedContext<Source>;
     }
 }

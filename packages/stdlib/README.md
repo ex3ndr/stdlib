@@ -7,20 +7,29 @@ needs it. That argument is always named `ctx`, including in callback APIs.
 
 ## Context
 
-The context module provides immutable, explicitly passed context values. Create
-a namespace to read and update a value:
+Create one root context before starting the rest of the application. It begins
+with the reserved name `<root>`. Only a root context has `named`, and it can be
+used to create any number of named contexts, including contexts with the same
+name. Every context used after that point is derived from the root:
 
 ```typescript
-import { EmptyContext, createContextNamespace } from "@steve.kite/stdlib";
+import { createContextNamespace, createRootContext } from "@steve.kite/stdlib";
+
+const root = createRootContext();
+root.name; // "<root>"
+
+const ctx = root.named("api");
+ctx.name; // "api"
 
 const requestId = createContextNamespace("request-id", "unknown");
-const ctx = requestId.set(EmptyContext, "request-42");
+const requestCtx = requestId.set(ctx, "request-42");
 
-requestId.get(ctx); // "request-42"
+requestId.get(requestCtx); // "request-42"
 ```
 
-Named contexts store their value in the built-in `ContextName` namespace and
-expose it through the direct `ctx.name` getter.
+The returned `Context` cannot itself be renamed and does not expose `named`;
+namespaces, lifetimes, and other operations derive new contexts from it while
+retaining its name.
 
 Context objects can be extended globally with typed getters and setters. Declare
 the properties once in an ambient TypeScript file, then register their runtime
@@ -59,12 +68,13 @@ The built-in `ctx.lifetime` getter reads that namespace directly.
 parent lifetime or the supplied signal aborts:
 
 ```typescript
-import { EmptyContext, timeout, withLifetime } from "@steve.kite/stdlib";
+import { createRootContext, timeout, withLifetime } from "@steve.kite/stdlib";
 
+const ctx = createRootContext().named("api");
 const controller = new AbortController();
-const ctx = withLifetime(EmptyContext, controller.signal);
+const operationCtx = withLifetime(ctx, controller.signal);
 
-await timeout(ctx, { ms: 10_000 }, async (ctx) => {
+await timeout(operationCtx, { ms: 10_000 }, async (ctx) => {
     await fetch("https://example.com", { signal: ctx.lifetime });
 });
 ```
@@ -73,26 +83,75 @@ The timeout signal also aborts when the callback settles, preventing work
 started inside that scope from accidentally outliving it. Cancellation is
 cooperative: operations inside the callback must observe `ctx.lifetime`.
 
+## Logging
+
+Install a Pino-compatible logger on the root before deriving application
+contexts. The logger reference is stored and invoked as-is:
+
+```typescript
+import pino from "pino";
+import {
+    createRootContext,
+    logger as contextLogger,
+    withLogContext,
+    withLogger,
+} from "@steve.kite/stdlib";
+
+let root = createRootContext();
+const logger = pino();
+root = withLogger(root, logger);
+contextLogger.get(root); // logger
+
+const ctx = root.named("api");
+const requestCtx = withLogContext(ctx, {
+    requestId: "request-42",
+    operation: "load-user",
+});
+
+requestCtx.log.info("user:load userId=user-1");
+```
+
+`logger.get(ctx)` returns the original logger reference, or `undefined` when no
+logger is installed. `withLogContext(ctx, fields)` returns a derived context and
+shallow-merges its fields with existing log context. Each
+`ctx.log.<level>(...)` call passes those fields as the first argument to the
+original logger method, followed by the provided arguments. The exported levels
+are `trace`, `debug`, `info`, `warn`, `error`, and `fatal`.
+
 ## Concurrency
 
 Concurrency primitives carry `Context` instead of accepting separate abort
 signals. The context is always first and every work callback receives it first:
 
 ```typescript
-import { EmptyContext, asyncLock, backoff, forever, gracefulShutdown } from "@steve.kite/stdlib";
+import {
+    GracefulShutdown,
+    asyncLock,
+    backoff,
+    createRootContext,
+    forever,
+    shutdown,
+    withShutdown,
+} from "@steve.kite/stdlib";
+
+let root = createRootContext();
+const appShutdown = new GracefulShutdown();
+root = withShutdown(root, appShutdown);
+
+const ctx = root.named("worker");
+shutdown.get(ctx); // appShutdown
 
 const lock = asyncLock();
-await backoff(EmptyContext, async (ctx, attempt) => {
+await backoff(ctx, async (ctx, attempt) => {
     await lock.runInLock(ctx, async (ctx) => {
         // Perform one attempt while holding the lock. Throw to retry.
     });
 });
 
-const shutdown = gracefulShutdown(EmptyContext);
-const loop = forever(shutdown.ctx, { name: "poller", delay: 15_000 }, async (ctx) => {
+const loop = forever(ctx, { name: "poller", delay: 15_000 }, async (ctx) => {
     // Poll using ctx; its lifetime ends when shutdown begins.
 });
-await shutdown.shutdown();
+await appShutdown.shutdown();
 await loop;
 ```
 
@@ -101,13 +160,16 @@ the lock before each backoff delay, allowing unrelated callers to make progress.
 Only put a retry inside `runInLock` when excluding every other caller for the
 entire retry window is an intentional requirement.
 
-`gracefulShutdown(ctx)` installs itself as `shutdown.ctx.shutdown`. A `forever`
-started with that context automatically registers under its required `name`, so
-shutdown can report and await the loop without a separate registration call.
+Create the application's `GracefulShutdown` before deriving named contexts and
+install it on the root with `withShutdown(root, appShutdown)`. Read it later with
+`shutdown.get(ctx)`; shutdown is not a field on `Context`. A `forever` started
+with a derived context automatically registers under its required `name`, so
+the coordinator can report and await the loop without a separate registration
+call.
 
 The concurrency module also exports `asyncQueue`, `delay`, `retry`,
-`AbortedError`, and abort helpers. `gracefulShutdown` reports named handlers
-that fail or do not finish before its timeout.
+`AbortedError`, and abort helpers. `GracefulShutdown` reports named handlers that
+fail or do not finish before its timeout.
 
 # License
 

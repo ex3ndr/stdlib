@@ -1,6 +1,11 @@
 import type { Context } from "./Context.js";
+import type { RootContext } from "./RootContext.js";
+
+export type DerivedContext<Source extends Context> = Source extends RootContext
+    ? RootContext
+    : Context;
 
 export interface ContextNamespace<Value> {
     get(ctx: Context): Value;
-    set(ctx: Context, value: Value): Context;
+    set<Source extends Context>(ctx: Source, value: Value): DerivedContext<Source>;
 }
