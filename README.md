@@ -193,6 +193,11 @@ the lock before each backoff delay, allowing unrelated callers to make progress.
 Only put a retry inside `runInLock` when excluding every other caller for the
 entire retry window is an intentional requirement.
 
+Locks and queues do not own a context. `runInLock(ctx, work)` uses its caller's
+context to create `asyncLock.wait` and `asyncQueue.wait` spans when acquisition
+is contended. Each wait span ends when that caller acquires the lock, before its
+protected work starts; uncontended acquisition creates no wait span.
+
 Create the application's `GracefulShutdown` before deriving named contexts and
 install it on the root with `withShutdown(root, appShutdown)`. Read it later with
 `shutdown.get(ctx)`; shutdown is not a field on `Context`. A `forever` started

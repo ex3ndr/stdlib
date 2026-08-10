@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+    asyncLock,
+    asyncQueue,
     createRootContext,
     span,
     traceSpan,
@@ -97,5 +99,49 @@ describe("telemetry", () => {
             ctx.span("job:bound", (childCtx) => childCtx),
             ctx,
         );
+    });
+
+    it("traces only the contended wait before lock work starts", async () => {
+        const tracer = new RecordingTracer();
+        const ctx = withTracer(createRootContext(), tracer).named("locks");
+        const lock = asyncLock();
+        let release: (() => void) | undefined;
+        const blocked = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const first = lock.runInLock(ctx, async () => blocked);
+        let waitEndedWhenWorkStarted = false;
+        const second = lock.runInLock(ctx, async () => {
+            waitEndedWhenWorkStarted = tracer.spans[1]?.ended === true;
+        });
+
+        assert.equal(tracer.spans[1]?.name, "asyncLock.wait");
+        assert.equal(tracer.spans[1]?.parent, tracer.spans[0]);
+        assert.equal(tracer.spans[1]?.ended, false);
+
+        release?.();
+        await Promise.all([first, second]);
+
+        assert.equal(tracer.spans[1]?.ended, true);
+        assert.equal(waitEndedWhenWorkStarted, true);
+        assert.equal(tracer.spans.length, 2);
+    });
+
+    it("uses a distinct wait span name for async queues", async () => {
+        const tracer = new RecordingTracer();
+        const ctx = withTracer(createRootContext(), tracer).named("queues");
+        const queue = asyncQueue();
+        let release: (() => void) | undefined;
+        const blocked = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const first = queue.runInLock(ctx, async () => blocked);
+        const second = queue.runInLock(ctx, async () => undefined);
+
+        assert.equal(tracer.spans[1]?.name, "asyncQueue.wait");
+
+        release?.();
+        await Promise.all([first, second]);
+        assert.equal(tracer.spans[1]?.ended, true);
     });
 });
