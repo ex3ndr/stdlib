@@ -1,0 +1,37 @@
+{
+    "name": "@steve.kite/stdlib",
+    "version": "0.0.0",
+    "description": "A verified, tree-shakeable TypeScript standard library",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/ex3ndr/stdlib.git",
+        "directory": "packages/stdlib"
+    },
+    "files": [
+        "dist"
+    ],
+    "type": "module",
+    "sideEffects": false,
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        }
+    },
+    "publishConfig": {
+        "access": "public"
+    },
+    "scripts": {
+        "build": "vite build && tsc --project tsconfig.build.json",
+        "dev": "vite build --watch",
+        "test": "node --import tsx --test tests/*.test.ts",
+        "typecheck": "tsc --noEmit --project tsconfig.json"
+    },
+    "devDependencies": {
+        "@types/node": "^26.0.0",
+        "tsx": "^4.21.0",
+        "typescript": "^7.0.2",
+        "vite": "8.1.4"
+    }
+}

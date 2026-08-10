@@ -1,0 +1,29 @@
+{
+    "name": "@steve.kite/stdlib-workspace",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "pnpm --recursive --if-present build",
+        "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+        "dev": "pnpm --filter @steve.kite/stdlib dev",
+        "format": "oxfmt --write .",
+        "format:check": "oxfmt --check .",
+        "lint": "oxlint .",
+        "prepare": "simple-git-hooks",
+        "test": "pnpm --recursive --if-present test",
+        "typecheck": "pnpm --recursive --if-present typecheck"
+    },
+    "devDependencies": {
+        "oxfmt": "^0.57.0",
+        "oxlint": "^1.73.0",
+        "simple-git-hooks": "^2.13.1"
+    },
+    "simple-git-hooks": {
+        "pre-commit": "pnpm format:check && pnpm lint"
+    },
+    "engines": {
+        "node": ">=24.0.0",
+        "pnpm": ">=10.28.1"
+    },
+    "packageManager": "pnpm@10.28.1"
+}

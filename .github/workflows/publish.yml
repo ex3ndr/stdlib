@@ -1,0 +1,39 @@
+name: Publish package
+
+on:
+    push:
+        tags:
+            - "v*"
+
+permissions:
+    contents: read
+    id-token: write
+
+jobs:
+    publish:
+        environment: npm
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v6
+
+            - uses: pnpm/action-setup@v6
+              with:
+                  version: 10.28.1
+
+            - uses: actions/setup-node@v6
+              with:
+                  node-version: "24"
+                  registry-url: https://registry.npmjs.org
+                  package-manager-cache: false
+
+            - name: Verify release tag
+              run: |
+                  package_version="$(node -p "require('./packages/stdlib/package.json').version")"
+                  test "$GITHUB_REF_NAME" = "v$package_version"
+
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm check
+
+            - name: Publish package
+              working-directory: packages/stdlib
+              run: npm publish
