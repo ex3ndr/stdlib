@@ -122,7 +122,7 @@ Without an installed logger, every `ctx.log` method is a no-op.
 ## Telemetry
 
 Install an OpenTelemetry-style tracer adapter on the root before creating named
-contexts. Naming a root-derived context starts its root span automatically:
+contexts. Naming a context carries the tracer but does not create a span:
 
 ```typescript
 import { createRootContext, traceSpan, withTracer, type Tracer } from "@steve.kite/stdlib";
@@ -132,8 +132,8 @@ declare const tracer: Tracer;
 let root = createRootContext();
 root = withTracer(root, tracer);
 
-const ctx = root.named("worker"); // Starts the "worker" root span.
-traceSpan.get(ctx); // The root span.
+const ctx = root.named("worker");
+traceSpan.get(ctx); // undefined
 
 await ctx.span("job:run", async (ctx) => {
     traceSpan.get(ctx); // The child "job:run" span.

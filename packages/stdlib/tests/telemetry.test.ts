@@ -44,30 +44,31 @@ class RecordingTracer implements Tracer {
 }
 
 describe("telemetry", () => {
-    it("creates root spans for named contexts and child spans for work", async () => {
+    it("creates spans only when traced work starts", async () => {
         const tracer = new RecordingTracer();
         const root = withTracer(createRootContext(), tracer);
         const ctx = root.named("worker");
-        const rootSpan = traceSpan.get(ctx);
 
         assert.equal(ContextTracer.get(ctx), tracer);
-        assert.equal(rootSpan, tracer.spans[0]);
-        assert.equal(traceSpan.get(ctx), rootSpan);
-        assert.equal(tracer.spans[0]?.name, "worker");
-        assert.equal(tracer.spans[0]?.parent, undefined);
+        assert.equal(traceSpan.get(ctx), undefined);
+        assert.equal(tracer.spans.length, 0);
 
         const result = await ctx.span("job:run", async (ctx) => {
-            const childSpan = traceSpan.get(ctx);
-            assert.equal(childSpan, tracer.spans[1]);
-            assert.equal(traceSpan.get(ctx), childSpan);
-            assert.equal(tracer.spans[1]?.parent, rootSpan);
-            assert.equal(tracer.spans[1]?.ended, false);
-            return "done";
+            const parentSpan = traceSpan.get(ctx);
+            assert.equal(parentSpan, tracer.spans[0]);
+            assert.equal(traceSpan.get(ctx), parentSpan);
+            assert.equal(tracer.spans[0]?.parent, undefined);
+            assert.equal(tracer.spans[0]?.ended, false);
+            return ctx.span("job:step", async (ctx) => {
+                assert.equal(traceSpan.get(ctx), tracer.spans[1]);
+                assert.equal(tracer.spans[1]?.parent, parentSpan);
+                return "done";
+            });
         });
 
         assert.equal(result, "done");
+        assert.equal(tracer.spans[0]?.ended, true);
         assert.equal(tracer.spans[1]?.ended, true);
-        assert.equal(rootSpan?.ended, false);
     });
 
     it("records failures and ends failed spans", async () => {
@@ -80,8 +81,8 @@ describe("telemetry", () => {
             /failed/,
         );
 
-        assert.deepEqual(tracer.spans[1]?.exceptions, [failure]);
-        assert.equal(tracer.spans[1]?.ended, true);
+        assert.deepEqual(tracer.spans[0]?.exceptions, [failure]);
+        assert.equal(tracer.spans[0]?.ended, true);
     });
 
     it("uses the original context and does no tracing without a provider", () => {
@@ -112,19 +113,19 @@ describe("telemetry", () => {
         const first = lock.runInLock(ctx, async () => blocked);
         let waitEndedWhenWorkStarted = false;
         const second = lock.runInLock(ctx, async () => {
-            waitEndedWhenWorkStarted = tracer.spans[1]?.ended === true;
+            waitEndedWhenWorkStarted = tracer.spans[0]?.ended === true;
         });
 
-        assert.equal(tracer.spans[1]?.name, "asyncLock.wait");
-        assert.equal(tracer.spans[1]?.parent, tracer.spans[0]);
-        assert.equal(tracer.spans[1]?.ended, false);
+        assert.equal(tracer.spans[0]?.name, "asyncLock.wait");
+        assert.equal(tracer.spans[0]?.parent, undefined);
+        assert.equal(tracer.spans[0]?.ended, false);
 
         release?.();
         await Promise.all([first, second]);
 
-        assert.equal(tracer.spans[1]?.ended, true);
+        assert.equal(tracer.spans[0]?.ended, true);
         assert.equal(waitEndedWhenWorkStarted, true);
-        assert.equal(tracer.spans.length, 2);
+        assert.equal(tracer.spans.length, 1);
     });
 
     it("uses a distinct wait span name for async queues", async () => {
@@ -138,10 +139,10 @@ describe("telemetry", () => {
         const first = queue.runInLock(ctx, async () => blocked);
         const second = queue.runInLock(ctx, async () => undefined);
 
-        assert.equal(tracer.spans[1]?.name, "asyncQueue.wait");
+        assert.equal(tracer.spans[0]?.name, "asyncQueue.wait");
 
         release?.();
         await Promise.all([first, second]);
-        assert.equal(tracer.spans[1]?.ended, true);
+        assert.equal(tracer.spans[0]?.ended, true);
     });
 });

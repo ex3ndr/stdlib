@@ -9,20 +9,10 @@ export interface ContextTraceValue {
 
 const ContextTraceKey = "stdlib.trace";
 
-export const ContextTrace = createContextNamespace<ContextTraceValue>(
-    ContextTraceKey,
-    { tracer: undefined, span: undefined },
-    {
-        onNamedContextCreated(ctx, name, value) {
-            void ctx;
-            if (value.tracer === undefined) return value;
-            return {
-                tracer: value.tracer,
-                span: value.tracer.startSpan(name, value.span),
-            };
-        },
-    },
-);
+export const ContextTrace = createContextNamespace<ContextTraceValue>(ContextTraceKey, {
+    tracer: undefined,
+    span: undefined,
+});
 
 export const tracer = Object.freeze({
     get(ctx: Context): Tracer | undefined {
