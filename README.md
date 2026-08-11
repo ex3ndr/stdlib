@@ -198,6 +198,41 @@ context to create `asyncLock.wait` and `asyncQueue.wait` spans when acquisition
 is contended. Each wait span ends when that caller acquires the lock, before its
 protected work starts; uncontended acquisition creates no wait span.
 
+Additional coordination primitives follow the same context-first callback
+shape:
+
+```typescript
+import { mapAsyncLock, mapReadWriteLock, readWriteLock, semaphore } from "@steve.kite/stdlib";
+
+const permits = semaphore(4);
+await permits.run(ctx, async (ctx) => {
+    // At most four permit holders run concurrently.
+});
+
+const users = mapAsyncLock<string>();
+await users.runInLock(ctx, userId, async (ctx) => {
+    // Serialized only with callers using the same userId.
+});
+
+const state = readWriteLock();
+await state.runInReadLock(ctx, async (ctx) => {
+    // Readers may run together.
+});
+await state.runInWriteLock(ctx, async (ctx) => {
+    // Writers are exclusive.
+});
+
+const records = mapReadWriteLock<string>();
+await records.runInWriteLock(ctx, recordId, async (ctx) => {
+    // Read/write exclusion is isolated to recordId.
+});
+```
+
+Read/write locks give queued writers priority over new readers. Keyed locks
+discard an entry once it has no active or waiting callers. Contended waits emit
+`semaphore.wait`, `mapAsyncLock.wait`, `readWriteLock.{read,write}.wait`, or
+`mapReadWriteLock.{read,write}.wait` spans from the caller's context.
+
 Create the application's `GracefulShutdown` before deriving named contexts and
 install it on the root with `withShutdown(root, appShutdown)`. Read it later with
 `shutdown.get(ctx)`; shutdown is not a field on `Context`. A `forever` started
