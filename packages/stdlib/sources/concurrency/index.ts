@@ -1,5 +1,5 @@
 export { AbortedError, isAbortedError, throwIfAborted } from "./AbortedError.js";
-export { asyncLock, type AsyncLock } from "./asyncLock.js";
+export { asyncLock, type AsyncLock, type AsyncLockOptions } from "./asyncLock.js";
 export { asyncQueue, type AsyncQueue } from "./asyncQueue.js";
 export { backoff, type BackoffOptions } from "./backoff.js";
 export { ContextLifetime } from "./impl/ContextLifetime.js";

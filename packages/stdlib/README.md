@@ -188,15 +188,23 @@ await appShutdown.shutdown();
 await loop;
 ```
 
+`asyncLock()` ignores reentry detection by default, preserving ordinary lock
+contention (and deadlocking if an outer callback awaits its own nested
+acquisition). Use `asyncLock({ reentry: "allow" })` to let nested calls run
+immediately while the context owns that lock, or `reentry: "block"` to reject a
+detected nested call with an error. Ownership expires when the outer callback
+settles, even if its context escapes.
+
 Retries should almost always wrap lock acquisition as shown above. This releases
 the lock before each backoff delay, allowing unrelated callers to make progress.
 Only put a retry inside `runInLock` when excluding every other caller for the
 entire retry window is an intentional requirement.
 
-Locks and queues do not own a context. `runInLock(ctx, work)` uses its caller's
-context to create `asyncLock.wait` and `asyncQueue.wait` spans when acquisition
-is contended. Each wait span ends when that caller acquires the lock, before its
-protected work starts; uncontended acquisition creates no wait span.
+Locks and queues are not bound to a context when created. `runInLock(ctx, work)`
+uses its caller's context to create `asyncLock.wait` and `asyncQueue.wait` spans
+when acquisition is contended. Each wait span ends when that caller acquires the
+lock, before its protected work starts; uncontended acquisition creates no wait
+span.
 
 Additional coordination primitives follow the same context-first callback
 shape:

@@ -47,6 +47,77 @@ describe("asyncLock", () => {
         await assert.doesNotReject(lock.runInLock(testCtx, () => Promise.resolve("ok")));
         assert.equal(await asyncQueue().runInLock(testCtx, () => Promise.resolve(42)), 42);
     });
+
+    it("blocks reentry when requested", async () => {
+        const lock = asyncLock({ reentry: "block" });
+
+        await lock.runInLock(testCtx, async (ctx) => {
+            await assert.rejects(
+                lock.runInLock(ctx, () => Promise.resolve()),
+                /AsyncLock reentry is blocked/,
+            );
+        });
+    });
+
+    it("allows reentry through the lock context", async () => {
+        const lock = asyncLock({ reentry: "allow" });
+        const events: string[] = [];
+
+        await lock.runInLock(testCtx, async (ctx) => {
+            events.push("outer:start");
+            await lock.runInLock(ctx, async (ctx) => {
+                events.push("inner");
+                await lock.runInLock(ctx, async () => {
+                    events.push("nested");
+                });
+            });
+            events.push("outer:end");
+        });
+
+        assert.deepEqual(events, ["outer:start", "inner", "nested", "outer:end"]);
+    });
+
+    it("ignores reentry detection by default", async () => {
+        const lock = asyncLock();
+        let nested: Promise<void> | undefined;
+        let nestedRan = false;
+
+        await lock.runInLock(testCtx, async (ctx) => {
+            nested = lock.runInLock(ctx, async () => {
+                nestedRan = true;
+            });
+            await Promise.resolve();
+            assert.equal(nestedRan, false);
+        });
+
+        await nested;
+        assert.equal(nestedRan, true);
+    });
+
+    it("does not treat an escaped inactive lock context as an owner", async () => {
+        const lock = asyncLock({ reentry: "allow" });
+        let escapedCtx = testCtx;
+
+        await lock.runInLock(testCtx, async (ctx) => {
+            escapedCtx = ctx;
+        });
+
+        let release: (() => void) | undefined;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const holder = lock.runInLock(testCtx, async () => gate);
+        let staleContextRan = false;
+        const fromStaleContext = lock.runInLock(escapedCtx, async () => {
+            staleContextRan = true;
+        });
+
+        await Promise.resolve();
+        assert.equal(staleContextRan, false);
+        release?.();
+        await Promise.all([holder, fromStaleContext]);
+        assert.equal(staleContextRan, true);
+    });
 });
 
 describe("delay", () => {
