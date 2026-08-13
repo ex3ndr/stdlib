@@ -8,6 +8,7 @@ export { delay } from "./delay.js";
 export { forever, type ForeverOptions } from "./forever.js";
 export { GracefulShutdown, type GracefulShutdownReport, withShutdown } from "./gracefulShutdown.js";
 export { retry, type RetryOptions } from "./retry.js";
+export { scoped } from "./scoped.js";
 export { mapAsyncLock, type MapAsyncLock } from "./mapAsyncLock.js";
 export { mapReadWriteLock, type MapReadWriteLock } from "./mapReadWriteLock.js";
 export { readWriteLock, type ReadWriteLock } from "./readWriteLock.js";

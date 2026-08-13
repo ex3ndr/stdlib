@@ -8,6 +8,7 @@ import {
     createRootContext,
     isContext,
     registerContextExtension,
+    scoped,
     timeout,
     type Context,
     withLifetime,
@@ -173,6 +174,48 @@ describe("context", () => {
         assert.equal(result, "done");
         assert.equal(callbackLifetime?.aborted, true);
         assert.equal(callbackLifetime?.reason.name, "AbortError");
+    });
+
+    it("limits a context lifetime to a callback scope", async () => {
+        let callbackLifetime: AbortSignal | undefined;
+
+        const result = await scoped(testCtx, async (ctx) => {
+            callbackLifetime = ctx.lifetime;
+            assert.equal(callbackLifetime?.aborted, false);
+            await Promise.resolve();
+            return "done";
+        });
+
+        assert.equal(result, "done");
+        assert.equal(callbackLifetime?.aborted, true);
+        assert.equal(callbackLifetime?.reason.name, "AbortError");
+    });
+
+    it("ends a scoped context when its callback rejects", async () => {
+        let callbackLifetime: AbortSignal | undefined;
+        const failure = new Error("failed");
+
+        await assert.rejects(
+            scoped(testCtx, (ctx) => {
+                callbackLifetime = ctx.lifetime;
+                throw failure;
+            }),
+            failure,
+        );
+
+        assert.equal(callbackLifetime?.aborted, true);
+    });
+
+    it("inherits the parent lifetime in a callback scope", async () => {
+        const parentController = new AbortController();
+        const parent = withLifetime(testCtx, parentController.signal);
+
+        await scoped(parent, (ctx) => {
+            assert.equal(ctx.lifetime?.aborted, false);
+            parentController.abort("parent completed");
+            assert.equal(ctx.lifetime?.aborted, true);
+            assert.equal(ctx.lifetime?.reason, "parent completed");
+        });
     });
 
     it("rejects duplicate extension registrations", () => {

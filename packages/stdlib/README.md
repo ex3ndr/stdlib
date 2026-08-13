@@ -68,7 +68,7 @@ The built-in `ctx.lifetime` getter reads that namespace directly.
 parent lifetime or the supplied signal aborts:
 
 ```typescript
-import { createRootContext, timeout, withLifetime } from "@steve.kite/stdlib";
+import { createRootContext, scoped, timeout, withLifetime } from "@steve.kite/stdlib";
 
 const ctx = createRootContext().named("api");
 const controller = new AbortController();
@@ -77,11 +77,17 @@ const operationCtx = withLifetime(ctx, controller.signal);
 await timeout(operationCtx, { ms: 10_000 }, async (ctx) => {
     await fetch("https://example.com", { signal: ctx.lifetime });
 });
+
+await scoped(operationCtx, async (ctx) => {
+    // ctx.lifetime remains active only until this callback settles.
+});
 ```
 
 The timeout signal also aborts when the callback settles, preventing work
 started inside that scope from accidentally outliving it. Cancellation is
 cooperative: operations inside the callback must observe `ctx.lifetime`.
+`scoped` provides the same callback-bound lifetime without adding a deadline and
+inherits cancellation from its parent context.
 
 ## Logging
 
