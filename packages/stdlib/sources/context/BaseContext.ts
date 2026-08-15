@@ -1,5 +1,6 @@
 import type { Log } from "../log/Log.js";
 import type { ContextSpan } from "../telemetry/span.js";
+import type { ContextAfterCommit } from "./afterCommit.js";
 import type { Context } from "./Context.js";
 import { ContextDeriveSymbol, ContextSymbol } from "./Context.js";
 
@@ -12,6 +13,7 @@ export abstract class BaseContext {
 }
 
 export interface BaseContext extends stdlib.ContextExtensions {
+    readonly afterCommit: ContextAfterCommit;
     readonly lifetime: AbortSignal | undefined;
     readonly log: Log;
     readonly name: string;

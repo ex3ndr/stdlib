@@ -1,6 +1,6 @@
 {
     "name": "@steve.kite/stdlib",
-    "version": "0.0.9",
+    "version": "0.0.10",
     "description": "A verified, tree-shakeable TypeScript standard library",
     "license": "Apache-2.0",
     "repository": {

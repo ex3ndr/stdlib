@@ -89,6 +89,37 @@ cooperative: operations inside the callback must observe `ctx.lifetime`.
 `scoped` provides the same callback-bound lifetime without adding a deadline and
 inherits cancellation from its parent context.
 
+### After commit
+
+Register work that should run after the current operation commits with
+`ctx.afterCommit`. Without further configuration, the callbacks begin on the
+next microtask. They run one at a time in registration order, and each callback
+receives the context used to register it:
+
+```typescript
+ctx.afterCommit(async (ctx) => {
+    await updateRedis(ctx);
+});
+```
+
+Use `withAfterCommit` when a transaction controls when post-commit work may
+start. It returns a derived context and an async drain function. Invoke the
+function only after the commit succeeds:
+
+```typescript
+const [transactionCtx, runAfterCommit] = withAfterCommit(ctx);
+
+transactionCtx.afterCommit(async (ctx) => {
+    await updateRedis(ctx);
+});
+
+await commitTransaction();
+await runAfterCommit();
+```
+
+The function form, `afterCommit(ctx, callback)`, has the same behavior as
+`ctx.afterCommit(callback)`.
+
 ## Logging
 
 Install a Pino-compatible logger on the root before deriving application

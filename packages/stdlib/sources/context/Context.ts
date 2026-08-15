@@ -1,5 +1,6 @@
 import type { Log } from "../log/Log.js";
 import type { ContextSpan } from "../telemetry/span.js";
+import type { ContextAfterCommit } from "./afterCommit.js";
 
 declare global {
     namespace stdlib {
@@ -13,6 +14,7 @@ export const ContextValuesSymbol = Symbol("ContextValues");
 
 export interface Context extends stdlib.ContextExtensions {
     [ContextDeriveSymbol](values: Record<string, unknown>): Context;
+    readonly afterCommit: ContextAfterCommit;
     readonly lifetime: AbortSignal | undefined;
     readonly log: Log;
     readonly name: string;

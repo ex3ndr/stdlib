@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+    afterCommit,
     ContextLifetime,
     ContextWrapper,
     createContextNamespace,
@@ -11,6 +12,7 @@ import {
     scoped,
     timeout,
     type Context,
+    withAfterCommit,
     withLifetime,
 } from "../sources/index.js";
 
@@ -123,6 +125,61 @@ describe("context", () => {
         const wrapped: Context = new WrappedContext(labelNamespace.set(testCtx, "wrapped"));
 
         assert.equal(wrapped.contextTestLabel, "wrapped");
+    });
+
+    it("runs after-commit callbacks on the next tick in registration order", async () => {
+        const ctx = createRootContext().named("after-commit");
+        const calls: string[] = [];
+        const completed = Promise.withResolvers<void>();
+
+        ctx.afterCommit(async (callbackCtx) => {
+            assert.equal(callbackCtx, ctx);
+            calls.push("first:start");
+            await Promise.resolve();
+            calls.push("first:end");
+        });
+        afterCommit(ctx, () => {
+            calls.push("second");
+            completed.resolve();
+        });
+
+        assert.deepEqual(calls, []);
+        await completed.promise;
+        assert.deepEqual(calls, ["first:start", "first:end", "second"]);
+    });
+
+    it("returns a context and function for deferred after-commit callbacks", async () => {
+        const [ctx, runAfterCommit] = withAfterCommit(createRootContext().named("transaction"));
+        const calls: string[] = [];
+
+        ctx.afterCommit(async () => {
+            calls.push("first:start");
+            await Promise.resolve();
+            calls.push("first:end");
+        });
+        ctx.afterCommit(() => {
+            calls.push("second");
+        });
+
+        assert.deepEqual(calls, []);
+
+        await runAfterCommit();
+        assert.deepEqual(calls, ["first:start", "first:end", "second"]);
+    });
+
+    it("preserves root contexts and their queue in an after-commit scope", async () => {
+        const [root, runAfterCommit] = withAfterCommit(createRootContext());
+        const ctx = root.named("worker");
+        let called = false;
+
+        ctx.afterCommit(() => {
+            called = true;
+        });
+
+        assert.equal(ctx.name, "worker");
+        assert.equal(called, false);
+        await runAfterCommit();
+        assert.equal(called, true);
     });
 
     it("derives contexts with optional lifetimes", () => {
