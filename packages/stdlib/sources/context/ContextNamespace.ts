@@ -6,6 +6,7 @@ export type DerivedContext<Source extends Context> = Source extends RootContext
     : Context;
 
 export interface ContextNamespaceOptions<Value> {
+    readonly detachable?: boolean;
     readonly onNamedContextCreated?: (ctx: RootContext, name: string, value: Value) => Value;
 }
 

@@ -5,6 +5,7 @@ import type {
     ContextNamespaceOptions,
     DerivedContext,
 } from "../ContextNamespace.js";
+import { registerNonDetachableContextValue } from "./ContextDetachment.js";
 import { getContextValues } from "./getContextValues.js";
 import { registerNamedContextFactory } from "./NamedContextFactories.js";
 
@@ -15,6 +16,9 @@ export class ContextNamespaceImpl<Value> implements ContextNamespace<Value> {
     constructor(name: string, defaultValue: Value, options: ContextNamespaceOptions<Value>) {
         this.name = name;
         this.defaultValue = defaultValue;
+        if (options.detachable === false) {
+            registerNonDetachableContextValue(name);
+        }
         if (options.onNamedContextCreated !== undefined) {
             registerNamedContextFactory(name, defaultValue, options.onNamedContextCreated);
         }

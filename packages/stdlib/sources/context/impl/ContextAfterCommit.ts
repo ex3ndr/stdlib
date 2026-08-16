@@ -22,6 +22,7 @@ const ContextAfterCommitKey = "stdlib.afterCommit";
 const ContextAfterCommit = createContextNamespace<AfterCommitState | undefined>(
     ContextAfterCommitKey,
     undefined,
+    { detachable: false },
 );
 
 const defaultStates = new WeakMap<Record<string, unknown>, AfterCommitState>();

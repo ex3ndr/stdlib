@@ -7,6 +7,7 @@ import {
     ContextWrapper,
     createContextNamespace,
     createRootContext,
+    detach,
     isContext,
     registerContextExtension,
     scoped,
@@ -109,6 +110,28 @@ describe("context", () => {
         );
     });
 
+    it("detaches a context into a root while omitting non-detachable values", () => {
+        const retained = createContextNamespace("context-test-detach-retained", "default");
+        const omitted = createContextNamespace("context-test-detach-omitted", "default", {
+            detachable: false,
+        });
+        const original = omitted.set(
+            retained.set(createRootContext().named("request"), "retained"),
+            "omitted",
+        );
+
+        const detached = detach(original);
+        const renamed = detached.named("worker");
+
+        assert.equal(original.name, "request");
+        assert.equal(detached.name, "<root>");
+        assert.equal(retained.get(detached), "retained");
+        assert.equal(omitted.get(detached), "default");
+        assert.equal(renamed.name, "worker");
+        assert.equal(retained.get(renamed), "retained");
+        assert.equal(omitted.get(renamed), "default");
+    });
+
     it("runs globally registered typed setters", () => {
         const ctx = testCtx;
 
@@ -180,6 +203,28 @@ describe("context", () => {
         assert.equal(called, false);
         await runAfterCommit();
         assert.equal(called, true);
+    });
+
+    it("does not carry an after-commit transaction through detach", async () => {
+        const [transactionCtx, runAfterCommit] = withAfterCommit(
+            createRootContext().named("transaction"),
+        );
+        const detachedCtx = detach(transactionCtx).named("detached");
+        const detachedCompleted = Promise.withResolvers<void>();
+        let transactionCalled = false;
+
+        transactionCtx.afterCommit(() => {
+            transactionCalled = true;
+        });
+        detachedCtx.afterCommit(() => {
+            detachedCompleted.resolve();
+        });
+
+        await detachedCompleted.promise;
+        assert.equal(transactionCalled, false);
+
+        await runAfterCommit();
+        assert.equal(transactionCalled, true);
     });
 
     it("derives contexts with optional lifetimes", () => {

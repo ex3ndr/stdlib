@@ -13,6 +13,7 @@ export type { ContextNamespaceType } from "./ContextNamespaceType.js";
 export type { RootContext } from "./RootContext.js";
 export { createContextNamespace } from "./createContextNamespace.js";
 export { createRootContext } from "./createRootContext.js";
+export { detach } from "./detach.js";
 export {
     type AfterCommitContext,
     type RunAfterCommit,

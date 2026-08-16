@@ -60,6 +60,25 @@ After registration, every `Context` has typed `requestId` and `priority`
 properties. Setters perform the registered action; they do not replace the
 immutable context. Use `ContextNamespace.set` when you need a derived context.
 
+Use `detach(ctx)` to copy a context's namespace values into a new root context
+that can be named again. Namespace values are retained by default. Set
+`detachable: false` when declaring a namespace whose value belongs only to the
+current context chain:
+
+```typescript
+const transaction = createContextNamespace("transaction", undefined, {
+    detachable: false,
+});
+
+const detachedRoot = detach(ctx);
+const workerCtx = detachedRoot.named("worker");
+```
+
+The built-in context name and after-commit transaction queue are
+non-detachable. A detached root is named `<root>`, and its derived contexts use
+the default next-tick after-commit behavior unless `withAfterCommit` is applied
+again.
+
 ### Lifetime
 
 A context can carry an optional abort signal in the `ContextLifetime` namespace.

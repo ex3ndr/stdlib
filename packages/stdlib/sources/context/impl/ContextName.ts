@@ -4,7 +4,9 @@ import { createContextNamespace } from "../createContextNamespace.js";
 
 const ContextNameKey = "stdlib.name";
 
-export const ContextName = createContextNamespace<string>(ContextNameKey, "<root>");
+export const ContextName = createContextNamespace<string>(ContextNameKey, "<root>", {
+    detachable: false,
+});
 
 Object.defineProperty(BaseContext.prototype, "name", {
     get(this: Context) {
