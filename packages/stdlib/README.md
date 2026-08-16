@@ -74,10 +74,10 @@ const detachedRoot = detach(ctx);
 const workerCtx = detachedRoot.named("worker");
 ```
 
-The built-in context name and after-commit transaction queue are
-non-detachable. A detached root is named `<root>`, and its derived contexts use
-the default next-tick after-commit behavior unless `withAfterCommit` is applied
-again.
+The built-in context name, lifetime, and after-commit transaction queue are
+non-detachable. A detached root is named `<root>`, has no lifetime, and its
+derived contexts use the default next-tick after-commit behavior unless
+`withAfterCommit` is applied again.
 
 ### Lifetime
 

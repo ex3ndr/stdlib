@@ -7,6 +7,7 @@ const ContextLifetimeKey = "stdlib.lifetime";
 export const ContextLifetime = createContextNamespace<AbortSignal | undefined>(
     ContextLifetimeKey,
     undefined,
+    { detachable: false },
 );
 
 Object.defineProperty(BaseContext.prototype, "lifetime", {

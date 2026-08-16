@@ -227,6 +227,16 @@ describe("context", () => {
         assert.equal(transactionCalled, true);
     });
 
+    it("does not carry a lifetime through detach", () => {
+        const controller = new AbortController();
+        const original = withLifetime(testCtx, controller.signal);
+        const detached = detach(original);
+
+        assert.equal(original.lifetime, controller.signal);
+        assert.equal(detached.lifetime, undefined);
+        assert.equal(detached.named("worker").lifetime, undefined);
+    });
+
     it("derives contexts with optional lifetimes", () => {
         const parentController = new AbortController();
         const childController = new AbortController();
